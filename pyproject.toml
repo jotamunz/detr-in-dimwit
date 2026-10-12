@@ -24,6 +24,7 @@ analysis = [
     "matplotlib>=3.9",
     "pillow>=10.0",
     "ipykernel>=6.29",
+    "umap-learn>=0.5.7",
 ]
 
 [tool.uv]
