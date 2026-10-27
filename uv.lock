@@ -322,6 +322,7 @@ analysis = [
     { name = "matplotlib" },
     { name = "pandas" },
     { name = "pillow" },
+    { name = "scipy" },
     { name = "seaborn" },
     { name = "umap-learn" },
 ]
@@ -342,6 +343,7 @@ analysis = [
     { name = "matplotlib", specifier = ">=3.9" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pillow", specifier = ">=10.0" },
+    { name = "scipy", specifier = ">=1.11" },
     { name = "seaborn", specifier = ">=0.13" },
     { name = "umap-learn", specifier = ">=0.5.7" },
 ]
