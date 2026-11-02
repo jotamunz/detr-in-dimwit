@@ -144,7 +144,7 @@ class Transcriber(nodes: AxisExtent[Node], drawings: Int = 1):
       val documentCache = model.read(model.encodeDocument(document))
       val (_, written) = scan(Axis[Node])((model.nothingTaken(nodes), Tensor0(true)), slots):
         case ((taken, writing), slot) =>
-          val (node, stillWriting) = answeredAt(model, documentCache, taken, slot, writing)
+          val (node, stillWriting, _) = answeredAt(model, documentCache, taken, slot, writing)
           def one[W](value: Tensor0[W]) = value.prependAxis(Axis[Node])
           val (cls, sx, sy, ex, ey) = node
           val taking = FloorplanNodes(one(cls), one(sx), one(sy), one(ex), one(ey))
@@ -167,10 +167,12 @@ private[floorplan] def open(setup: D2SSetup, split: Split) =
   SyntheticFloorplans.open(Axis[Width], Axis[Height], Axis[Channel], Axis[Node], Axis[Relationship])(split, setup.canvas)
 
 /** The likeliest of what the pool answers at `slot` — the node a drawing that is still `writing`
-  * takes there, nothing for one that is not — and whether it is still writing after it.
+  * takes there, nothing for one that is not — whether it is still writing after it, and the
+  * prediction embedding that answer was read from.
   */
 def answeredAt(model: D2S[Float32], documentCache: List[KVCache[Patch, Float32]], taken: List[KVCache[Node, Float32]], slot: Tensor0[Int32], writing: Tensor0[Bool]) =
-  val (said, score) = answered(model.nodeHead, model.answerAt(documentCache, taken, slot))
+  val predictions = model.predictionsAt(documentCache, taken, slot).relabel(Axis[PoolQuery] -> Axis[Node])
+  val (said, score) = answered(model.nodeHead, model.nodeHead(predictions))
   val likeliest = Axis[Node].at(score.argmax(Axis[Node]))
   val stillWriting = writing and !said.nodeClass.slice(likeliest).elementEquals(FloorplanClass.NoNode.id)
   val node = (
@@ -180,7 +182,7 @@ def answeredAt(model: D2S[Float32], documentCache: List[KVCache[Patch, Float32]]
     where(stillWriting, said.endX.slice(likeliest), 0),
     where(stillWriting, said.endY.slice(likeliest), 0)
   )
-  (node, stillWriting)
+  (node, stillWriting, predictions.slice(likeliest))
 
 /** The node every position along `Node` answers with, and the log probability of that answer: the
   * score of its class plus the score of each coordinate of its two ends.

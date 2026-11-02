@@ -16,6 +16,7 @@ import syntheticFloorplansDataset.SyntheticFloorplans
   * [[d2sTest]] scores its last checkpoint on the test split.
   * [[d2sPlot]] shows what it transcribes (visualization).
   * [[d2sDraw]] writes what every checkpoint transcribed as a picture.
+  * [[d2sEmbeddings]] writes what the newest floor plan run makes of a sample of the validation plans.
   */
 
 @main
@@ -43,6 +44,10 @@ def d2sPlot(corpus: String, size: String): Unit =
 def d2sDraw(corpus: String, size: String): Unit =
   if corpus == SyntheticFloorplans.name then d2s.floorplan.eval.drawSetTranscriber(d2s.floorplan.config.D2SSetup(D2SModelConfiguration.named(size)), size)
   else d2s.sketch.eval.drawSetTranscriber(d2s.sketch.config.D2SSetup(Corpus.named(corpus), D2SModelConfiguration.named(size)), size)
+
+/** Writes the embeddings, at either end of the model, of a sample of the validation floor plans. */
+@main
+def d2sEmbeddings(size: String): Unit = d2s.floorplan.eval.writeEmbeddings(d2s.floorplan.config.D2SSetup(D2SModelConfiguration.named(size)), size)
 
 private def score(corpus: String, size: String, split: Split): Unit =
   if corpus == SyntheticFloorplans.name then

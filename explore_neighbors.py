@@ -9,7 +9,8 @@
 #   pixels   late interaction of their inked tiles as drawn, the same tiles the encoder reads
 # UMAP lays the drawings out in three dimensions by the same measure. The map only says where a
 # drawing is shown: clicking one marks its nearest neighbors by the measure itself, so where they
-# land on the map shows how far the map can be trusted around there.
+# land on the map shows how far the map can be trusted around there. The page is written into the
+# run's folder.
 # Run the whole file for the page: `python explore_neighbors.py decoder`.
 import base64
 import io
@@ -21,19 +22,26 @@ from pathlib import Path
 
 import numpy as np
 import umap
-from huggingface_hub import hf_hub_download
 from PIL import Image
 from scipy.optimize import linear_sum_assignment
 
-RUNS = Path("results/runs")
-RUN = RUNS / "vitruvion-final-d2po"
+# The run looked at. The rest is read from its folder: what the run was, from its environment file;
+# the newest embeddings `d2sEmbeddings` wrote into it; and the transcripts of the same step, which
+# say what every drawing holds and what the model wrote down for it.
+RUN = Path("results/runs") / "floorplans-d2s-walls-first-seed0"
 
-EMBEDDINGS = RUN / "d2s-embeddings-vitruvion-primitives-s-deep-val-270000.npz"
-DRAWINGS = hf_hub_download(repo_id="benikm91/sketch-graph-vitruvion", filename="records/val_images.npy", repo_type="dataset")
+environment = json.loads(next(RUN.glob("*.environment.json")).read_text(encoding="utf-8"))
+model, corpus, size = environment["model"], environment["corpus"], environment["size"]
 
-# What every drawing holds, and what the model wrote down for it, from the transcripts scored
-# beside the checkpoint.
-TRANSCRIPTS = RUN / "d2s-vitruvion-primitives-s-deep-val-270000.jsonl"
+
+def step_of(path):
+    return int(path.stem.rsplit("-", 1)[1])
+
+
+written_by = sorted(RUN.glob(f"{model}-embeddings-{corpus}-{size}-val-*.npz"), key=step_of)
+assert written_by, f"no embeddings in {RUN}: run d2sEmbeddings with OUTPUT_DIR set to it"
+EMBEDDINGS = written_by[-1]
+TRANSCRIPTS = RUN / f"{model}-{corpus}-{size}-val-{step_of(EMBEDDINGS)}.jsonl"
 
 SPACE = sys.argv[1] if len(sys.argv) > 1 else "encoder"
 
@@ -50,19 +58,18 @@ UMAP_NEIGHBORS = 15
 SEED = 0
 
 # How many drawings have their tiles held against every inked tile at once, which is what bounds
-# the memory of late interaction.
-AT_ONCE = 50
+# the memory of late interaction: a drawing's 64 tiles against 64 for each of 5000 is 80 MB.
+AT_ONCE = 8
 
 
 # %% The drawings, and what the model made of them
 saved = np.load(EMBEDDINGS)
-drawings = np.load(DRAWINGS, mmap_mode="r")
 
 # A drawing without ink, or one the decoder writes nothing down for, has nothing to be compared
 # by. It is left off the map whatever the measure, so that every map holds the same drawings.
 inked, written = saved["inked"] > 0, saved["written"] > 0
 kept = inked.any(axis=1) & written.any(axis=1)
-shown = saved["drawing"][kept]
+shown, pictures = saved["drawing"][kept], saved["pictures"][kept]
 patches, inked = saved["patches"][kept], inked[kept]
 items, written = saved["items"][kept], written[kept]
 
@@ -123,7 +130,7 @@ def one_to_one(items, written):
 
 
 def pixel_interaction():
-    tiles = tiles_of(drawings[shown])
+    tiles = tiles_of(pictures)
     return late_interaction(tiles, tiles.max(axis=-1) > 0)
 
 
@@ -159,7 +166,8 @@ with open(TRANSCRIPTS, encoding="utf-8") as transcripts:
 
 def record_of(drawing):
     record = json.loads(lines[drawing])
-    assert record["drawing"] == drawing, "the transcripts are not in the order of the split"
+    # A sketch's transcripts number it as a drawing, a floor plan's as a plan.
+    assert record.get("drawing", record.get("plan")) == drawing, "the transcripts are not in the order of the split"
     return record
 
 
@@ -173,9 +181,9 @@ def described(classes):
     return ", ".join(f"{count} {name}{'' if count == 1 else 's'}" for name, count in ordered) or "nothing"
 
 
-def png(drawing):
+def png(picture):
     buffer = io.BytesIO()
-    Image.fromarray(np.asarray(drawings[drawing])).save(buffer, format="PNG", optimize=True)
+    Image.fromarray(picture).save(buffer, format="PNG", optimize=True)
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
 
 
@@ -188,7 +196,7 @@ page = {
     "y": np.round(placed[:, 1], 4).tolist(),
     "z": np.round(placed[:, 2], 4).tolist(),
     "holds": [described(held) for held in holds],
-    "picture": [png(drawing) for drawing in shown],
+    "picture": [png(picture) for picture in pictures],
     "nearest": nearest.tolist(),
     "closeness": np.round(closeness, 4).tolist(),
 }

@@ -135,7 +135,7 @@ class Transcriber(nodes: AxisExtent[Node], edges: AxisExtent[Edge], drawings: In
       val documentCache = model.set.read(encoded)
       val (_, (writtenNodes, carried)) = scan(Axis[Node])((model.set.nothingTaken(nodes), Tensor0(true)), nodeSlots):
         case ((taken, writing), slot) =>
-          val (node, stillWriting) = answeredAt(model.set, documentCache, taken, slot, writing)
+          val (node, stillWriting, _) = answeredAt(model.set, documentCache, taken, slot, writing)
           def one[W](value: Tensor0[W]) = value.prependAxis(Axis[Node])
           val (cls, sx, sy, ex, ey) = node
           val (carried, nowTaken) = model.set.take(documentCache, taken, slot, FloorplanNodes(one(cls), one(sx), one(sy), one(ex), one(ey)))
