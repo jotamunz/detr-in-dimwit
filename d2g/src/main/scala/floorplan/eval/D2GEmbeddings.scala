@@ -67,7 +67,7 @@ def embeddingsTranscriber(setup: D2GSetup, size: String): Unit =
       .toSeq
 
       /* Row `i` of a part is about the plan `seeds[i]`, the seed naming it in the dataset:
-       *   records.jsonl: the record written down, as the dataset's labels are
+       *   predicted_records.jsonl: the predicted record, as the dataset's labels are
        *   patches.npy: (plans, patches, embedding) the encoded document
        *   node_predictions.npy: (nodes, embedding) one per node of every record, in its order;
        *                         plan i's are rows node_offsets[i] until node_offsets[i + 1]
@@ -79,7 +79,7 @@ def embeddingsTranscriber(setup: D2GSetup, size: String): Unit =
       val writing = Files.createDirectories(directory.resolve(s"$name.partial"))
       def save(file: String, array: py.Any) = Jax.np.save(writing.resolve(file).toString, array)
       def offsets(counts: Seq[Int]) = Jax.np.array(counts.scanLeft(0)(_ + _).toPythonCopy, dtype = "int64")
-      Files.writeString(writing.resolve("records.jsonl"), embedded.flatMap(_.records).mkString("", "\n", "\n"))
+      Files.writeString(writing.resolve("predicted_records.jsonl"), embedded.flatMap(_.records).mkString("", "\n", "\n"))
       save("seeds.npy", Jax.np.array(seeds.toPythonCopy, dtype = "int64"))
       save("patches.npy", numpy(concatenate(embedded.map(_.patches), Axis[Drawing])))
       save("node_predictions.npy", numpy(concatenate(embedded.map(_.nodes), Axis[Node])))
