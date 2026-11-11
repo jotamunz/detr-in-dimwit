@@ -44,7 +44,7 @@ class FloorplanDecodingSuite extends munit.FunSuite:
 
     def one[V](values: Tensor1[Node, V], slot: Int) = values.slice(Axis[Node].at(slot, 1))
     (0 until slots).foldLeft(model.nothingTaken(Axis[Node] -> slots)): (taken, slot) =>
-      val atSlot = model.answerAt(documentCache, taken, slot)
+      val (_, atSlot) = model.answerAt(documentCache, taken, slot)
       def assertSame[L: Label](name: String, cached: Tensor2[Node, L, Float32], read: Tensor3[PoolQuery, Node, L, Float32]) =
         val difference = (cached.relabel(Axis[Node] -> Axis[PoolQuery]) - read.slice(Axis[Node].at(slot))).abs.max.item
         assert(difference < 1e-4f, s"slot $slot, $name: the cached answer is off by $difference")

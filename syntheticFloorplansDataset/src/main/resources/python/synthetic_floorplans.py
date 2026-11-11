@@ -102,5 +102,11 @@ def records(repo_id, part, side, nodes, edges, classes, relationships):
     return node_class, start_x, start_y, end_x, end_y, relationship, subject, obj
 
 
+def seeds(repo_id, part):
+    """The seed of every plan of a part, in the order of its lines."""
+    with open(_file(repo_id, "%s_labels.jsonl" % part), encoding="utf-8") as labels:
+        return [json.loads(label)["seed"] for label in labels]
+
+
 def _file(repo_id, filename):
     return hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")

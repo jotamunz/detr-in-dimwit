@@ -57,6 +57,16 @@ case class FloorplanGraph(nodes: Seq[FloorplanNode], edges: Seq[FloorplanEdge]):
         times(FloorplanRelationship.values.toSeq.filter(_.isRelationship), _.recordName, related => edges.count(_.relationship == related))
     if held.isEmpty then "nothing" else held.mkString(", ")
 
+  /** The fields of a record's JSON object: its nodes, their points in the pixels the drawings are stored at, 
+    * and its relationships, naming nodes by their position.
+    */
+  def recordFields: String =
+    val side = SyntheticFloorplans.storedSide
+    def point(at: Point) = f"[${at.x * side}%.2f, ${at.y * side}%.2f]"
+    def node(at: FloorplanNode) = s"""{"class": "${at.nodeClass.recordName}", "points": [${point(at.start)}, ${point(at.end)}]}"""
+    def edge(at: FloorplanEdge) = s"""{"type": "${at.relationship.recordName}", "nodes": [${at.subject}, ${at.obj}]}"""
+    s""""nodes": ${nodes.map(node).mkString("[", ", ", "]")}, "relationships": ${edges.map(edge).mkString("[", ", ", "]")}"""
+
 object FloorplanGraph:
 
   /** The record a layout holds, every relationship resolved to the nodes it links. One naming a
@@ -156,12 +166,7 @@ object FloorplanScoring:
 object FloorplanTranscripts:
 
   def write(model: String, size: String, split: Split, step: Int, canvas: Int, plans: Seq[(FloorplanGraph, FloorplanGraph)]): Path =
-    val side = SyntheticFloorplans.storedSide
-    def point(at: Point) = f"[${at.x * side}%.2f, ${at.y * side}%.2f]"
-    def node(at: FloorplanNode) = s"""{"class": "${at.nodeClass.recordName}", "points": [${point(at.start)}, ${point(at.end)}]}"""
-    def edge(at: FloorplanEdge) = s"""{"type": "${at.relationship.recordName}", "nodes": [${at.subject}, ${at.obj}]}"""
-    def record(at: FloorplanGraph) =
-      s"""{"nodes": ${at.nodes.map(node).mkString("[", ", ", "]")}, "relationships": ${at.edges.map(edge).mkString("[", ", ", "]")}}"""
+    def record(at: FloorplanGraph) = s"{${at.recordFields}}"
 
     val lines = plans.zipWithIndex.map:
       case ((target, predicted), plan) =>

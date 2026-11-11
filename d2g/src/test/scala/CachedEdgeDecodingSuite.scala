@@ -56,7 +56,7 @@ class CachedEdgeDecodingSuite extends munit.FunSuite:
 
     def oneEdge(values: Tensor1[Edge, Int32], slot: Int) = values.slice(Axis[Edge].at(slot, 1))
     (0 until edgeSlots).foldLeft(model.noEdgeTaken(Axis[Edge] -> edgeSlots)): (taken, slot) =>
-      val atSlot = model.answerEdgeAt(written, sources, taken, slot)
+      val (_, atSlot) = model.answerEdgeAt(written, sources, taken, slot)
       def assertSame[L: Label](name: String, cached: Tensor2[Edge, L, Float32], read: Tensor3[PoolQuery, Edge, L, Float32]) =
         val difference = (cached.relabel(Axis[Edge] -> Axis[PoolQuery]) - read.slice(Axis[Edge].at(slot))).abs.max.item
         assert(difference < 1e-4f, s"slot $slot, $name: the cached answer is off by $difference")

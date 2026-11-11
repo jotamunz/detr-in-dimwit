@@ -6,6 +6,7 @@ import d2g.floorplan.model.*
 import d2g.floorplan.train.*
 import d2g.floorplan.config.*
 import d2s.eval.chosen
+import d2s.model.PoolQuery
 import d2s.floorplan.eval.answeredAt
 import dataset.DrawingDataset.Split
 import dataset.Metrics
@@ -105,7 +106,23 @@ def plotTranscriber(setup: D2GSetup): Unit =
 private val TranscribedTogether = 32
 
 /** Axis of the plans transcribed together. */
-private trait Drawing derives Label
+trait Drawing derives Label
+
+/** What a batch of plans is transcribed into: the record each is written down as, and what it was
+  * written from.
+  *
+  * @param patches The encoded document, as both decoders read it.
+  * @param nodePredictions At every node slot, the prediction embedding of the query whose answer
+  *                        the slot holds. Only the slots that hold a node stand for one: the slot 
+  *                        after them holds the prediction that ended the record, and the rest are padding.
+  * @param relationshipPredictions The same at every relationship slot.
+  */
+case class Transcription(
+    record: FloorplanRecordBatch[Drawing, Node, Edge],
+    patches: Tensor3[Drawing, Patch, Embedding, Float32],
+    nodePredictions: Tensor3[Drawing, Node, Embedding, Float32],
+    relationshipPredictions: Tensor3[Drawing, Edge, Embedding, Float32]
+)
 
 /** Transcribes floor plans: the nodes of each one at a time, then the relationships between them.
   *
@@ -126,38 +143,38 @@ class Transcriber(nodes: AxisExtent[Node], edges: AxisExtent[Edge], drawings: In
 
   private val jitTranscribe = jit(transcribe)
 
-  private def transcribe(params: D2G.Params[Float32], documents: Tensor4[Drawing, Width, Height, Channel, Float32]): FloorplanRecordBatch[Drawing, Node, Edge] =
+  private def transcribe(params: D2G.Params[Float32], documents: Tensor4[Drawing, Width, Height, Channel, Float32]): Transcription =
     val model = D2G(params)
     val nodeSlots = Tensor1(nodes.axis).fromRange(0 until nodes.size)
     val edgeSlots = Tensor1(edges.axis).fromRange(0 until edges.size)
-    val (nodeClass, startX, startY, endX, endY, relationship, subject, obj) = documents.vmap(Axis[Drawing]): document =>
+    val (nodeClass, startX, startY, endX, endY, relationship, subject, obj, patches, nodePredictions, relationshipPredictions) = documents.vmap(Axis[Drawing]): document =>
       val encoded = model.encodeDocument(document)
       val documentCache = model.set.read(encoded)
-      val (_, (writtenNodes, carried)) = scan(Axis[Node])((model.set.nothingTaken(nodes), Tensor0(true)), nodeSlots):
+      val (_, (writtenNodes, carried, nodePredictions)) = scan(Axis[Node])((model.set.nothingTaken(nodes), Tensor0(true)), nodeSlots):
         case ((taken, writing), slot) =>
-          val (node, stillWriting) = answeredAt(model.set, documentCache, taken, slot, writing)
+          val (node, stillWriting, prediction) = answeredAt(model.set, documentCache, taken, slot, writing)
           def one[W](value: Tensor0[W]) = value.prependAxis(Axis[Node])
           val (cls, sx, sy, ex, ey) = node
           val (carried, nowTaken) = model.set.take(documentCache, taken, slot, FloorplanNodes(one(cls), one(sx), one(sy), one(ex), one(ey)))
-          ((nowTaken, stillWriting), (node, carried))
+          ((nowTaken, stillWriting), (node, carried, prediction))
       val (nodeClass, startX, startY, endX, endY) = writtenNodes
       val written = NodeSource(carried, !(nodeClass elementEquals_! FloorplanClass.NoNode.id))
       val sources = model.readForEdges(encoded, written)
-      val (_, (relationship, subject, obj)) = scan(Axis[Edge])((model.noEdgeTaken(edges), Tensor0(true)), edgeSlots):
+      val (_, ((relationship, subject, obj), relationshipPredictions)) = scan(Axis[Edge])((model.noEdgeTaken(edges), written.presentMask.any), edgeSlots):
         case ((taken, writing), slot) =>
-          val (edge, stillWriting) = answeredEdgeAt(model, written, sources, taken, slot, writing)
+          val (edge, stillWriting, prediction) = answeredEdgeAt(model, written, sources, taken, slot, writing)
           def one[W](value: Tensor0[W]) = value.prependAxis(Axis[Edge])
           val (related, sub, ob) = edge
-          ((model.takeEdge(written, sources, taken, slot, FloorplanEdges(one(related), one(sub), one(ob))), stillWriting), edge)
-      (nodeClass, startX, startY, endX, endY, relationship, subject, obj)
-    FloorplanRecordBatch(nodeClass, startX, startY, endX, endY, relationship, subject, obj)
+          ((model.takeEdge(written, sources, taken, slot, FloorplanEdges(one(related), one(sub), one(ob))), stillWriting), (edge, prediction))
+      (nodeClass, startX, startY, endX, endY, relationship, subject, obj, encoded, nodePredictions, relationshipPredictions)
+    Transcription(FloorplanRecordBatch(nodeClass, startX, startY, endX, endY, relationship, subject, obj), patches, nodePredictions, relationshipPredictions)
 
   /** The likeliest of what the pool answers at relationship `slot` — the relationship a plan that
-    * is still `writing` takes there, nothing for one that is not — and whether it is still writing
-    * after it.
+    * is still `writing` takes there, nothing for one that is not — whether it is still writing after
+    * it, and the prediction embedding of the query that answered it.
     */
   private def answeredEdgeAt(model: D2G[Float32], nodes: NodeSource[Embedding, Float32], sources: List[EdgeSources[Float32]], taken: List[KVCache[Edge, Float32]], slot: Tensor0[Int32], writing: Tensor0[Bool]) =
-    val candidates = model.answerEdgeAt(nodes, sources, taken, slot)
+    val (predictions, candidates) = model.answerEdgeAt(nodes, sources, taken, slot)
     val said = model.edgeHead.decide(candidates)
     val score = chosen(candidates.relationship) + chosen(candidates.subject) + chosen(candidates.obj)
     val likeliest = Axis[Edge].at(score.argmax(Axis[Edge]))
@@ -167,7 +184,7 @@ class Transcriber(nodes: AxisExtent[Node], edges: AxisExtent[Edge], drawings: In
       where(stillWriting, said.subject.slice(likeliest), 0),
       where(stillWriting, said.obj.slice(likeliest), 0)
     )
-    (edge, stillWriting)
+    (edge, stillWriting, predictions.slice(Axis[PoolQuery].at(score.argmax(Axis[Edge]))))
 
   def apply(params: D2G.Params[Float32], document: Tensor3[Width, Height, Channel, Float32]): FloorplanGraph =
     apply(params, Seq(document)).head
@@ -176,7 +193,11 @@ class Transcriber(nodes: AxisExtent[Node], edges: AxisExtent[Edge], drawings: In
     require(documents.nonEmpty, "there is nothing to transcribe")
     require(documents.size <= drawings, s"${documents.size} plans do not fit in a batch of $drawings")
     val filled = documents.padTo(drawings, documents.last)
-    FloorplanGraph.of(jitTranscribe(params, stack(filled, Axis[Drawing]))).take(documents.size)
+    FloorplanGraph.of(jitTranscribe(params, stack(filled, Axis[Drawing])).record).take(documents.size)
 
-private def open(setup: D2GSetup, split: Split) =
+  /** A whole batch of plans transcribed, with what they were written from. */
+  def transcription(params: D2G.Params[Float32], documents: Tensor4[Drawing, Width, Height, Channel, Float32]): Transcription =
+    jitTranscribe(params, documents)
+
+private[floorplan] def open(setup: D2GSetup, split: Split) =
   SyntheticFloorplans.open(Axis[Width], Axis[Height], Axis[Channel], Axis[Node], Axis[Edge])(split, setup.canvas)

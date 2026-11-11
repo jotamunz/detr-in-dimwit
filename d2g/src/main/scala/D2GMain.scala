@@ -17,6 +17,8 @@ import dataset.DrawingDataset.Split
   * [[d2gEval]] scores the newest run of that size (greedy decoding).
   * [[d2gTest]] scores its last checkpoint on the test split.
   * [[d2gPlot]] shows what it transcribes (visualization).
+  * [[d2gEmbeddings]] exports embeddings and predictions for the whole dataset from its last checkpoint,
+  * to be used for aligning another model.
   */
 
 @main
@@ -41,3 +43,6 @@ def d2gTest(size: String): Unit = scoreTranscriber(D2GSetup(D2SModelConfiguratio
 
 @main
 def d2gPlot(size: String): Unit = plotTranscriber(D2GSetup(D2SModelConfiguration.named(size)))
+
+@main
+def d2gEmbeddings(size: String): Unit = embeddingsTranscriber(D2GSetup(D2SModelConfiguration.named(size)), size)

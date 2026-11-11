@@ -86,12 +86,13 @@ class D2S[V: IsFloating](params: D2S.Params[V]):
     val embedded = nodePosition.injectAt(slot)(embedNodes(node).squeeze(Axis[Node]))
     nodeDecoder.take(documentCache, taken, slot, embedded)
 
-  /** What the pool answers at `slot`, given the nodes taken before it: a candidate node per query,
-    * in the order of the queries.
+  /** What the pool answers at `slot`, given the nodes taken before it: per query, in the order of
+    * the queries, the prediction embedding it ends as and the candidate node the head reads from it.
     */
-  def answerAt(documentCache: List[KVCache[Patch, V]], taken: List[KVCache[Node, V]], slot: Tensor0[Int32]): NodeLogits[V] =
+  def answerAt(documentCache: List[KVCache[Patch, V]], taken: List[KVCache[Node, V]], slot: Tensor0[Int32]): (Tensor2[PoolQuery, Embedding, V], NodeLogits[V]) =
     val asked = params.nodes.queries.vmap(Axis[PoolQuery])(nodePosition.injectAt(slot))
-    nodeHead(nodeDecoder.answer(documentCache, taken, slot, asked).relabel(Axis[PoolQuery] -> Axis[Node]))
+    val predictions = nodeDecoder.answer(documentCache, taken, slot, asked)
+    (predictions, nodeHead(predictions.relabel(Axis[PoolQuery] -> Axis[Node])))
 
 object D2S:
 

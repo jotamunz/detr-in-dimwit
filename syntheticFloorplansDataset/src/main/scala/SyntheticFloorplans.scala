@@ -215,7 +215,7 @@ object SyntheticFloorplans:
 
   /** What a run names the corpus by on its command line and in what it writes. */
   val name = "synthetic-floorplans"
-  val repoId = "benikm91/synthetic-floorplans-for-transcription"
+  val repoId = "jotamunz/synthetic-floorplans"
 
   /** The side the drawings are stored at in pixels, which a record's points are given in. */
   val storedSide = 512
@@ -292,12 +292,24 @@ final class SyntheticFloorplans[W: Label, H: Label, C: Label, Node: Label, Edge:
     val firstPart = perPart.scanLeft(0)(_ + _).init.lastIndexWhere(_ <= skipped)
     val intoFirst = skipped - perPart.take(firstPart).sum
     Iterator.from(firstPart).flatMap: at =>
-      val part = at % parts.size
-      val (images, parsed) = read(part)
-      val starts = (0 until perPart(part)).map(_ * batch.size).drop(if at == firstPart then intoFirst else 0)
-      starts.iterator.map: from =>
-        val pixels = images.applyDynamic("__getitem__")(py.Dynamic.global.slice(from, from + batch.size))
-        Batch(liftPyTensor[(S, H, W), UInt8](pixels), recordsIn(parsed, batch, from))
+      batchesOf(at % parts.size, batch, skipping = if at == firstPart then intoFirst else 0)
+
+  /** The plans of one part in whole batches, in seed order, once: a part that does not cut into
+    * whole batches leaves its last plans out.
+    *
+    * @param skipping The batches passed over without being read.
+    */
+  def batchesOf[S: Label](part: Int, batch: AxisExtent[S], skipping: Int = 0): Iterator[Batch[S, W, H, FloorplanRecordBatch[S, Node, Edge]]] =
+    val (images, parsed) = read(part)
+    val starts = (0 until parts(part)._2 / batch.size).map(_ * batch.size).drop(skipping)
+    starts.iterator.map: from =>
+      val pixels = images.applyDynamic("__getitem__")(py.Dynamic.global.slice(from, from + batch.size))
+      Batch(liftPyTensor[(S, H, W), UInt8](pixels), recordsIn(parsed, batch, from))
+
+  /** The seed of every plan of a part, in seed order: what names a plan in every dataset made from
+    * the same generator.
+    */
+  def seeds(part: Int): Seq[Int] = module.seeds(repoId, parts(part)._1).as[Seq[Int]]
 
   override def toString: String = s"SyntheticFloorplans($repoId, plans=$numSamples, parts=${parts.size}, canvas=$canvas)"
 

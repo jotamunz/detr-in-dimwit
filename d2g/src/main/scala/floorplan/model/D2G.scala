@@ -94,12 +94,14 @@ class D2G[V: IsFloating](params: D2G.Params[V]):
   def takeEdge(nodes: NodeSource[Embedding, V], sources: List[EdgeSources[V]], taken: List[KVCache[Edge, V]], slot: Tensor0[Int32], edge: FloorplanEdges[Edge]): List[KVCache[Edge, V]] =
     edgeDecoder.take(sources, taken, slot, edgePosition.injectAt(slot)(embedEdges(edge, nodes.nodeEmbeddings).squeeze(Axis[Edge])))
 
-  /** What the pool answers at relationship `slot`, given the relationships taken before it: a
-    * candidate relationship between `nodes` per query, in the order of the queries.
+  /** What the pool answers at relationship `slot`, given the relationships taken before it: per
+    * query, in the order of the queries, the prediction embedding it ends as and the candidate
+    * relationship between `nodes` the head reads from it.
     */
-  def answerEdgeAt(nodes: NodeSource[Embedding, V], sources: List[EdgeSources[V]], taken: List[KVCache[Edge, V]], slot: Tensor0[Int32]): EdgeLogits[V] =
+  def answerEdgeAt(nodes: NodeSource[Embedding, V], sources: List[EdgeSources[V]], taken: List[KVCache[Edge, V]], slot: Tensor0[Int32]): (Tensor2[PoolQuery, Embedding, V], EdgeLogits[V]) =
     val asked = params.edges.queries.vmap(Axis[PoolQuery])(edgePosition.injectAt(slot))
-    edgeHead(edgeDecoder.answer(sources, taken, slot, asked).relabel(Axis[PoolQuery] -> Axis[Edge]), nodes)
+    val predictions = edgeDecoder.answer(sources, taken, slot, asked)
+    (predictions, edgeHead(predictions.relabel(Axis[PoolQuery] -> Axis[Edge]), nodes))
 
 object D2G:
 
