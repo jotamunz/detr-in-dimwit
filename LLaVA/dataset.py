@@ -33,9 +33,14 @@ class PlanConversation:
 
 
 class PlanConversations(Dataset):
-    """The conversations for the plans of a split: ``train``, ``val`` or ``test``."""
+    """The conversations for the plans of a split."""
 
     def __init__(self, split, captioning=CAPTIONING, embeddings=EMBEDDINGS):
+        """
+        :param split: ``train``, ``val`` or ``test``
+        :param captioning: the Hugging Face dataset for captioning
+        :param embeddings: the folder containing the embeddings
+        """
         # Load all the parts of the split
         self.parts = sorted(part for part in embeddings.iterdir() if part.name.startswith(split))
         if not self.parts:

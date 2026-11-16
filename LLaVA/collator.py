@@ -8,7 +8,7 @@ template adds its default one. Only the assistant's answers and the ends of its 
 import numpy as np
 import torch
 
-IMAGE_SLOT = "<|image_pad|>"
+IMAGE_PAD = "<|image_pad|>"
 """A Qwen vocabulary token that marks a patch"""
 IGNORED = -100
 """The label the language model's loss passes over"""
@@ -26,6 +26,9 @@ class ConversationCollator:
     """
 
     def __init__(self, tokenizer):
+        """
+        :param tokenizer: the language model's tokenizer
+        """
         self.tokenizer = tokenizer
         
     def tokenize(self, text):
@@ -38,7 +41,7 @@ class ConversationCollator:
         tokenized = ""
         for turn in plan.conversation:
             # Replace the image placeholder with one token per patch.
-            message = {"role": ROLES[turn["from"]], "content": turn["value"].replace("<image>", IMAGE_SLOT * len(plan.patches))}
+            message = {"role": ROLES[turn["from"]], "content": turn["value"].replace("<image>", IMAGE_PAD * len(plan.patches))}
             if message["role"] == "assistant":
                 # Format all the conversation so far, without tokenizing.
                 prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
