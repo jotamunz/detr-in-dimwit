@@ -25,3 +25,4 @@ jobs.txt
 *.csv
 results/runs/
 sync_results.sh
+LLaVA/out
