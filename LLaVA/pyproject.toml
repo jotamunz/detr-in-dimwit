@@ -6,9 +6,10 @@ requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.0",
     "torch>=2.5",
-    "transformers>=4.46",
+    "transformers>=4.56",
     "huggingface-hub[hf-xet]>=0.36",
     "pyarrow>=17.0",
+    "wandb>=0.19",
 ]
 
 [tool.uv]
