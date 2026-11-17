@@ -1,6 +1,6 @@
 """Trains the projector between the d2g encoder and a frozen language model on the captions of the
 plans. The run is logged to Weights & Biases, with its settings, the training loss of every update and
-the validation loss every so often. ``projector.pt`` in OUTPUT_DIR (``LLaVA/out`` unless set) holds
+the validation loss every so often, beside the loss of a blind model shown another plan's patches. ``projector.pt`` in OUTPUT_DIR (``LLaVA/out`` unless set) holds
 the projector's weights as last validated, with the language model they speak to.
 
     uv run train.py --language-model Qwen/Qwen2.5-0.5B-Instruct
@@ -75,14 +75,24 @@ def main():
         return {key: value.to(device, non_blocking=True) for key, value in batch.items()}
 
     @torch.no_grad()
-    def validation_loss():
-        losses = [model(**on_device(micro_batch)).loss.item() for micro_batch in val_loader]
-        return sum(losses) / len(losses)
+    def validate(run, update):
+        """Logs the validation loss of the model against a blind model that sees the patches of the previous plan."""
+        val_losses, blind_losses = [], []
+        for micro_batch in val_loader:
+            micro_batch = on_device(micro_batch)
+            val_losses.append(model(**micro_batch).loss.item())
+            previous_plan_patches = micro_batch["patches"].roll(1, dims=0)
+            blind_losses.append(model(**(micro_batch | {"patches": previous_plan_patches})).loss.item())
+        val_loss, blind_loss = sum(val_losses) / len(val_losses), sum(blind_losses) / len(blind_losses)
+        run.log({"val/loss": val_loss, "val/blind_loss": blind_loss}, step=update)
+        torch.save({"language_model": settings.language_model, "projector": model.projector.state_dict()}, OUTPUT / "projector.pt")
+        print("epoch %d | update %d/%d | val loss %.4f | blind %.4f" % (math.ceil(update / updates_per_epoch), update, total_updates, val_loss, blind_loss))
 
     print("training a projector for %s: %d updates of %d plans" % (settings.language_model, total_updates, settings.batch_size))
     with wandb.init(project=WANDB_PROJECT, config=vars(settings), dir=OUTPUT) as run:
         update = 0
-        for epoch in range(settings.epochs):
+        validate(run, update)
+        for _ in range(settings.epochs):
             update_loss = 0.0
             for micro_batch_number, micro_batch in enumerate(train_loader, start=1):
                 # Discard the last micro-batches of an epoch if they do not fill a batch.
@@ -99,14 +109,11 @@ def main():
                 schedule.step()
                 optimizer.zero_grad()
                 update += 1
-                run.log({"train/loss": float(update_loss), "train/learning_rate": schedule.get_last_lr()[0], "epoch": epoch + 1}, step=update)
+                run.log({"train/loss": float(update_loss), "train/learning_rate": schedule.get_last_lr()[0]}, step=update)
                 update_loss = 0.0
 
                 if update % settings.validate_every == 0 or update == total_updates:
-                    val_loss = validation_loss()
-                    run.log({"val/loss": val_loss}, step=update)
-                    torch.save({"language_model": settings.language_model, "projector": model.projector.state_dict()}, OUTPUT / "projector.pt")
-                    print("epoch %d | update %d/%d | val loss %.4f" % (epoch + 1, update, total_updates, val_loss))
+                    validate(run, update)
 
 
 if __name__ == "__main__":
