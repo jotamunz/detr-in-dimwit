@@ -13,7 +13,7 @@ from pathlib import Path
 
 import torch
 import wandb
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_cosine_schedule_with_warmup
 
 from collator import IMAGE_PATCH, ConversationCollator
@@ -34,6 +34,7 @@ def main():
     arguments.add_argument("--epochs", type=int, default=1)
     arguments.add_argument("--validate-every", type=int, default=50, help="updates per checkpoint")
     arguments.add_argument("--workers", type=int, default=4, help="processes loading plans")
+    arguments.add_argument("--overfit", action="store_true", help="train and validate on the first batch of training plans alone")
     settings = arguments.parse_args()
     if settings.batch_size % settings.micro_batch_size != 0:
         raise ValueError("a batch of %d plans does not cut into micro-batches of %d" % (settings.batch_size, settings.micro_batch_size))
@@ -46,6 +47,9 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(settings.language_model)
     language_model = AutoModelForCausalLM.from_pretrained(settings.language_model, dtype=torch.bfloat16)
     train_dataset, val_dataset = PlanConversations("train"), PlanConversations("val")
+    if settings.overfit:
+        train_dataset = Subset(train_dataset, range(settings.batch_size))
+        val_dataset = train_dataset
     model = LLaVA(language_model, tokenizer.convert_tokens_to_ids(IMAGE_PATCH), patch_embedding=train_dataset[0].patches.shape[-1]).to(device)
 
     def loader(dataset, shuffle):
