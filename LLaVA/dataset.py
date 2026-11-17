@@ -45,9 +45,9 @@ class PlanConversations(Dataset):
         self.parts = sorted(part for part in embeddings.iterdir() if part.name.startswith(split))
         if not self.parts:
             raise FileNotFoundError("no embeddings of %s in %s" % (split, embeddings))
-        seeds = [np.load(part / "seeds.npy") for part in self.parts]
-        self.part_starts = np.cumsum([0] + [len(part) for part in seeds])
-        self.seeds = np.concatenate(seeds)
+        seeds_per_part = [np.load(part / "seeds.npy") for part in self.parts]
+        self.part_starts = np.cumsum([0] + [len(part_seeds) for part_seeds in seeds_per_part])
+        self.seeds = np.concatenate(seeds_per_part)
 
         # Download the captioning dataset and read the conversations of the split, which are in the same order as the plans.
         snapshot = Path(snapshot_download(captioning, repo_type="dataset", allow_patterns="data/%s-*.parquet" % split))

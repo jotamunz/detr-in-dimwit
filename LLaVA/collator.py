@@ -8,7 +8,7 @@ template adds its default one. Only the assistant's answers and the ends of its 
 import numpy as np
 import torch
 
-IMAGE_PAD = "<|image_pad|>"
+IMAGE_PATCH = "<|image_pad|>"
 """A Qwen vocabulary token that marks a patch"""
 IGNORED = -100
 """The label the language model's loss passes over"""
@@ -38,19 +38,19 @@ class ConversationCollator:
         """The plan's conversation as tokens with a label for each one."""
         
         messages, tokens, labels = [], [], []
-        tokenized = ""
+        tokenized_text = ""
         for turn in plan.conversation:
             # Replace the image placeholder with one token per patch.
-            message = {"role": ROLES[turn["from"]], "content": turn["value"].replace("<image>", IMAGE_PAD * len(plan.patches))}
+            message = {"role": ROLES[turn["from"]], "content": turn["value"].replace("<image>", IMAGE_PATCH * len(plan.patches))}
             if message["role"] == "assistant":
                 # Format all the conversation so far, without tokenizing.
                 prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
                 # Tokenize only the new part of the prompt and its answer.
-                prompt_tokens = self.tokenize(prompt[len(tokenized):])
+                prompt_tokens = self.tokenize(prompt[len(tokenized_text):])
                 answer_tokens = self.tokenize(message["content"] + self.tokenizer.eos_token)
                 tokens += prompt_tokens + answer_tokens
                 labels += [IGNORED] * len(prompt_tokens) + answer_tokens
-                tokenized = prompt + message["content"] + self.tokenizer.eos_token
+                tokenized_text = prompt + message["content"] + self.tokenizer.eos_token
             messages.append(message)
         return tokens, labels
 

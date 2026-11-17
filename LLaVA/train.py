@@ -16,7 +16,7 @@ import wandb
 from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_cosine_schedule_with_warmup
 
-from collator import IMAGE_PAD, ConversationCollator
+from collator import IMAGE_PATCH, ConversationCollator
 from dataset import PlanConversations
 from model import LLaVA
 
@@ -46,7 +46,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(settings.language_model)
     language_model = AutoModelForCausalLM.from_pretrained(settings.language_model, dtype=torch.bfloat16)
     train_dataset, val_dataset = PlanConversations("train"), PlanConversations("val")
-    model = LLaVA(language_model, tokenizer.convert_tokens_to_ids(IMAGE_PAD), patch_embedding=train_dataset[0].patches.shape[-1]).to(device)
+    model = LLaVA(language_model, tokenizer.convert_tokens_to_ids(IMAGE_PATCH), patch_embedding=train_dataset[0].patches.shape[-1]).to(device)
 
     def loader(dataset, shuffle):
         return DataLoader(
