@@ -30,7 +30,11 @@ def embeddingsTranscriber(setup: D2GSetup, size: String): Unit =
   println(s"reading ${checkpoints.rootPath}")
   val params = checkpoints.loadLatest[SavedParams].getOrElse(sys.error(s"no checkpoint in ${checkpoints.rootPath}")).params
   val transcriber = Transcriber(Axis[Node] -> setup.nodeSlots, Axis[Edge] -> setup.edgeSlots)
-  val directory = Path.of(Runs.outputDir, s"d2g-embeddings-${SyntheticFloorplans.name}-$size")
+  // Embeddings are saved to the parent of the checkpoint at `embeddings/d2g/<corpus>-<size>/<run>/<step>/<part>`.
+  val directory = Path.of(Runs.checkpointDir).toAbsolutePath.getParent
+    .resolve(s"embeddings/d2g/${SyntheticFloorplans.name}-$size")
+    .resolve(Path.of(checkpoints.rootPath).getFileName)
+    .resolve(checkpoints.iterations.last.toString)
   println(s"writing to $directory")
 
   def numpy[T <: Tuple: Labels, V](tensor: Tensor[T, V]) = TensorTree[Tensor[T, V]].toNumpyTree(tensor)
