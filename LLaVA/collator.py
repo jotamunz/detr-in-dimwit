@@ -13,7 +13,7 @@ IMAGE_PATCH = "<|image_pad|>"
 IGNORED = -100
 """The label the language model's loss passes over"""
 ROLES = {"human": "user", "gpt": "assistant"}
-"""TODO: Update role names in datasets"""
+# TODO: Update role names in datasets
 
 
 class ConversationCollator:

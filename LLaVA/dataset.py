@@ -1,10 +1,11 @@
 """The floor plans and the conversations about them, each plan as the patches the d2g encoder made of
 its drawing.
 
-The encoder has already read every plan: ``d2g/out/embeddings/{part}/patches.npy`` holds
-``(plans, patches, embedding)`` in float16 and ``seeds.npy`` the seed of every row. The conversations
-are those of https://huggingface.co/datasets/jotamunz/synthetic-floorplans-captioning, whose ``id`` is
-the same seed. A split is one part or, for train, the parts ``train-00`` to ``train-03``, and both
+The encoder has already read every plan. Its embeddings lie beside the checkpoints of its run, in
+``embeddings-d2g-<corpus>-<size>-<run>-<step>``, where ``{part}/patches.npy`` holds
+``(plans, patches, embedding)`` in float16 and ``{part}/seeds.npy`` the seed of every row. The conversations
+are those of a Hugging Face dataset of the same plans, such as
+https://huggingface.co/datasets/jotamunz/synthetic-floorplans-captioning, whose ``id`` is the same seed. A split is one part or, for train, the parts ``train-00`` to ``train-03``, and both
 sides keep their plans in seed order, so row ``i`` of the one is row ``i`` of the other.
 """
 
@@ -16,9 +17,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from huggingface_hub import snapshot_download
 from torch.utils.data import Dataset
-
-CAPTIONING = "jotamunz/synthetic-floorplans-captioning"
-EMBEDDINGS = Path(__file__).resolve().parent.parent / "d2g" / "out" / "embeddings"
 
 
 @dataclass
@@ -35,11 +33,11 @@ class PlanConversation:
 class PlanConversations(Dataset):
     """The conversations for the plans of a split."""
 
-    def __init__(self, split, captioning=CAPTIONING, embeddings=EMBEDDINGS):
+    def __init__(self, split, embeddings, captioning):
         """
         :param split: ``train``, ``val`` or ``test``
-        :param captioning: the Hugging Face dataset for captioning
         :param embeddings: the folder containing the embeddings
+        :param captioning: the Hugging Face captioning dataset
         """
         # Load all the parts of the split
         self.parts = sorted(part for part in embeddings.iterdir() if part.name.startswith(split))
