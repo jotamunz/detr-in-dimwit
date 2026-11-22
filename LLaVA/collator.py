@@ -16,6 +16,14 @@ ROLES = {"human": "user", "gpt": "assistant"}
 # TODO: Update role names in datasets
 
 
+
+def format_conversation(plan):
+    return [
+        {"role": ROLES[turn["from"]], "content": turn["value"].replace("<image>", IMAGE_PATCH * len(plan.patches))}
+        for turn in plan.conversation
+    ]
+
+
 class ConversationCollator:
     """Turns plan conversations into a batch, right-padded to the longest one:
 
@@ -39,9 +47,7 @@ class ConversationCollator:
         
         messages, tokens, labels = [], [], []
         tokenized_text = ""
-        for turn in plan.conversation:
-            # Replace the image placeholder with one token per patch.
-            message = {"role": ROLES[turn["from"]], "content": turn["value"].replace("<image>", IMAGE_PATCH * len(plan.patches))}
+        for message in format_conversation(plan):
             if message["role"] == "assistant":
                 # Format all the conversation so far, without tokenizing.
                 prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)

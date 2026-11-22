@@ -39,10 +39,17 @@ class LLaVA(nn.Module):
         self.image_patch_id = image_patch_id
         self.projector = Projector(patch_embedding, language_model.config.hidden_size)
 
-    def forward(self, tokens, attention_mask, patches, labels=None):
+    def embed(self, tokens, patches):
+        """The tokens' embeddings, with the projected patches in place of the patch placeholders."""
         embeddings = self.language_model.get_input_embeddings()(tokens)
         # Keep the projector in float32 for its updates, whatever precision the language model runs in.
         projections = self.projector(patches.float()).to(embeddings.dtype)
         placeholders = tokens == self.image_patch_id
-        replaced = embeddings.masked_scatter(placeholders.unsqueeze(-1), projections)
-        return self.language_model(inputs_embeds=replaced, attention_mask=attention_mask, labels=labels)
+        return embeddings.masked_scatter(placeholders.unsqueeze(-1), projections)
+
+    def forward(self, tokens, attention_mask, patches, labels=None):
+        return self.language_model(inputs_embeds=self.embed(tokens, patches), attention_mask=attention_mask, labels=labels)
+
+    @torch.no_grad()
+    def generate(self, tokens, attention_mask, patches, generation_config):
+        return self.language_model.generate(inputs_embeds=self.embed(tokens, patches), attention_mask=attention_mask, generation_config=generation_config)
