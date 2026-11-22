@@ -26,7 +26,7 @@ class Projector(nn.Module):
 
 
 class LLaVA(nn.Module):
-    """The frozen language model with a projector for the vision encoder."""
+    """The language model with a projector for the vision encoder."""
 
     def __init__(self, language_model, image_patch_id, patch_embedding):
         """
@@ -35,7 +35,7 @@ class LLaVA(nn.Module):
         :param patch_embedding: the width of an encoder patch
         """
         super().__init__()
-        self.language_model = language_model.requires_grad_(False)
+        self.language_model = language_model
         self.image_patch_id = image_patch_id
         self.projector = Projector(patch_embedding, language_model.config.hidden_size)
 

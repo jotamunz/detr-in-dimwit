@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=llava
+#SBATCH --job-name=llava-projector
 #SBATCH --partition=gpu_top
 #SBATCH --account=cai_cv
 #SBATCH --gres=gpu:1
@@ -11,10 +11,10 @@
 #SBATCH --error=/cluster/home/%u/.logs/slurm/%j/%x_%j.err
 #
 # Trains the LLaVA projector for three epochs on the embeddings of the frozen d2g encoder.
-# Arguments after the script go on to train.py:
+# Arguments after the script go on to train_projector.py:
 #
-#   sbatch runs/llava.sh
-#   sbatch runs/llava.sh --learning-rate 3e-4
+#   sbatch runs/llava-projector.sh
+#   sbatch runs/llava-projector.sh --learning-rate 3e-4
 #
 # irvine's GPUs are AMD; every other GPU in gpu_top runs this PyTorch build.
 # The venv lives on the node's persistent scratch, built by the first job that lands there.
@@ -26,7 +26,7 @@ export UV_CACHE_DIR=/raid/persistent_scratch/$USER/uv-cache
 
 cd LLaVA
 uv sync
-uv run train.py \
+uv run train_projector.py \
   --embeddings ../results/runs/floorplans-d2g-walls-first-by-kind-frozen-seed0-200k/embeddings-d2g-synthetic-floorplans-s-deep-20261031_112046-200000 \
   --epochs 3 \
   "$@"

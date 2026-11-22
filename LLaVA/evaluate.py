@@ -19,7 +19,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from collator import IMAGE_PATCH, format_conversation
 from dataset import PlanConversation, PlanConversations
 from model import LLaVA
-from train import CAPTIONING
+from train_projector import DATASET_CAPTIONING
 
 MAX_NEW_TOKENS = 80
 """Safety cutoff for generated text"""
@@ -55,7 +55,7 @@ def main():
 
     tokenizer = AutoTokenizer.from_pretrained(checkpoint["language_model"])
     language_model = AutoModelForCausalLM.from_pretrained(checkpoint["language_model"], dtype=torch.bfloat16)
-    dataset = PlanConversations(settings.split, settings.embeddings, CAPTIONING)
+    dataset = PlanConversations(settings.split, settings.embeddings, DATASET_CAPTIONING)
     model = LLaVA(language_model, tokenizer.convert_tokens_to_ids(IMAGE_PATCH), patch_embedding=dataset[0].patches.shape[-1])
     model.projector.load_state_dict(checkpoint["projector"])
     model.to(device).eval()

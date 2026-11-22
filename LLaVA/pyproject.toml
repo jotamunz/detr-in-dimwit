@@ -10,6 +10,7 @@ dependencies = [
     "huggingface-hub[hf-xet]>=0.36",
     "pyarrow>=17.0",
     "wandb>=0.19",
+    "peft>=0.13",
 ]
 
 [tool.uv]
