@@ -3,7 +3,7 @@
 #SBATCH --partition=gpu_top
 #SBATCH --account=cai_cv
 #SBATCH --gres=gpu:1
-#SBATCH --exclude=irvine,sacramento
+#SBATCH --exclude=irvine
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
 #SBATCH --time=10:00:00
@@ -16,8 +16,7 @@
 #   sbatch runs/llava-lora.sh
 #   sbatch runs/llava-lora.sh --rank 128 --alpha 256
 #
-# irvine's GPUs are AMD, which this PyTorch build does not run on; sacramento's A100s have 40 GB,
-# too little for the adapters' training.
+# irvine's GPUs are AMD, which this PyTorch build does not run on
 # The venv lives on the node's persistent scratch, built by the first job that lands there.
 
 set -euo pipefail
