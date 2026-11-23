@@ -28,9 +28,13 @@ def format_conversation(plan):
         for layer_type in ENTITY_NAMES if layer_type in plan.elements
         for number in range(len(plan.elements[layer_type]))
     )
+    values = [turn["value"] for turn in plan.conversation]
+    # TODO: Add the <record> placeholder to the QA set
+    if record and not any("<record>" in value for value in values):
+        values = [value.replace("<image>", "<image>\n<record>") for value in values]
     return [
-        {"role": ROLES[turn["from"]], "content": turn["value"].replace("<image>", image).replace("<record>", record)}
-        for turn in plan.conversation
+        {"role": ROLES[turn["from"]], "content": value.replace("<image>", image).replace("<record>", record)}
+        for turn, value in zip(plan.conversation, values)
     ]
 
 
