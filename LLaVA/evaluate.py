@@ -20,11 +20,11 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
-from collator import IMAGE_PATCH, format_conversation
+from collator import PLACEHOLDERS, format_conversation
 from dataset import PlanConversation, PlanConversations
 from model import LLaVA
 from train_lora import DATASET_QA
-from train_projector import DATASET_CAPTIONING
+from train_projector import DATASETS_CAPTIONING
 
 MAX_NEW_TOKENS = 80
 """Safety cutoff for generated text"""
@@ -63,9 +63,9 @@ def main():
     language_model = AutoModelForCausalLM.from_pretrained(checkpoint["language_model"], dtype=torch.bfloat16)
     if adapted:
         language_model = PeftModel.from_pretrained(language_model, latest).merge_and_unload()
-    dataset = PlanConversations(settings.split, settings.embeddings, DATASET_QA if adapted else DATASET_CAPTIONING)
-    model = LLaVA(language_model, tokenizer.convert_tokens_to_ids(IMAGE_PATCH), patch_embedding=dataset[0].patches.shape[-1])
-    model.projector.load_state_dict(checkpoint["projector"])
+    dataset = PlanConversations(settings.split, settings.embeddings, DATASET_QA if adapted else DATASETS_CAPTIONING["patches"], ["patches"])
+    model = LLaVA(language_model, {"patches": tokenizer.convert_tokens_to_ids(PLACEHOLDERS["patches"])}, element_embedding=dataset[0].elements["patches"].shape[-1])
+    model.projectors["patches"].load_state_dict(checkpoint["projector"])
     model.to(device).eval()
 
     # Plain greedy decoding, in place of the sampling and repetition penalty the model ships with.
@@ -87,8 +87,8 @@ def main():
     for start in range(0, len(turns), settings.batch_size):
         batch = turns[start:start + settings.batch_size]
         prompts = tokenizer([turn.prompt for turn in batch], padding=True, padding_side="left", add_special_tokens=False, return_tensors="pt")
-        patches = torch.from_numpy(np.stack([turn.plan.patches for turn in batch]))
-        written = model.generate(prompts["input_ids"].to(device), prompts["attention_mask"].to(device), patches.to(device), greedy)
+        elements = {"patches": torch.from_numpy(np.concatenate([turn.plan.elements["patches"] for turn in batch])).to(device)}
+        written = model.generate(prompts["input_ids"].to(device), prompts["attention_mask"].to(device), elements, greedy)
         for turn, answer in zip(batch, tokenizer.batch_decode(written, skip_special_tokens=True)):
             print("\nplan %d | %s" % (turn.plan.seed, turn.question.replace("\n", " ")))
             print("  reference: %s" % turn.reference)

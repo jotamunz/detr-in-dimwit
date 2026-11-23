@@ -17,7 +17,7 @@ from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import train
-from collator import IMAGE_PATCH, ConversationCollator
+from collator import PLACEHOLDERS, ConversationCollator
 from dataset import PlanConversations
 from model import LLaVA
 
@@ -36,7 +36,7 @@ def main():
     parser.set_defaults(batch_size=128, micro_batch_size=16)
     settings = train.parse(parser)
 
-    projector_path = max(settings.projector.glob("*.pt"), key=lambda path: int(path.stem))
+    projector_path = train.latest_checkpoint(settings.projector)
     projector_checkpoint = torch.load(projector_path, map_location="cpu")
     settings.language_model = projector_checkpoint["language_model"]
     print("starting from %s, a projector for %s" % (projector_path, settings.language_model))
@@ -51,14 +51,15 @@ def main():
         task_type="CAUSAL_LM",
     )
     language_model = get_peft_model(pretrained, adapters)
-    train_dataset = PlanConversations("train", settings.embeddings, DATASET_QA)
-    val_dataset = PlanConversations("val", settings.embeddings, DATASET_QA)
-    model = LLaVA(language_model, tokenizer.convert_tokens_to_ids(IMAGE_PATCH), patch_embedding=train_dataset[0].patches.shape[-1])
-    model.projector.load_state_dict(projector_checkpoint["projector"])
+    train_dataset = PlanConversations("train", settings.embeddings, DATASET_QA, ["patches"])
+    val_dataset = PlanConversations("val", settings.embeddings, DATASET_QA, ["patches"])
+    model = LLaVA(language_model, {"patches": tokenizer.convert_tokens_to_ids(PLACEHOLDERS["patches"])}, element_embedding=train_dataset[0].elements["patches"].shape[-1])
+    projector = model.projectors["patches"]
+    projector.load_state_dict(projector_checkpoint["projector"])
     optimizer = torch.optim.AdamW(
         [
             {"params": [parameter for parameter in language_model.parameters() if parameter.requires_grad], "lr": settings.adapters_learning_rate},
-            {"params": model.projector.parameters(), "lr": settings.projector_learning_rate},
+            {"params": projector.parameters(), "lr": settings.projector_learning_rate},
         ],
         weight_decay=0.0,
     )
@@ -68,7 +69,7 @@ def main():
     def save(update):
         checkpoint_dir = lora_dir / str(update)
         language_model.save_pretrained(checkpoint_dir)
-        torch.save({"language_model": settings.language_model, "projector": model.projector.state_dict()}, checkpoint_dir / "projector.pt")
+        torch.save({"language_model": settings.language_model, "projector": projector.state_dict()}, checkpoint_dir / "projector.pt")
 
     language_model.print_trainable_parameters()
     train.train(settings, model, optimizer, ConversationCollator(tokenizer), train_dataset, val_dataset, save)

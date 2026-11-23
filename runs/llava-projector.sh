@@ -5,12 +5,12 @@
 #SBATCH --gres=gpu:1
 #SBATCH --exclude=irvine
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=48G
 #SBATCH --time=04:00:00
 #SBATCH --output=/cluster/home/%u/.logs/slurm/%j/%x_%j.out
 #SBATCH --error=/cluster/home/%u/.logs/slurm/%j/%x_%j.err
 #
-# Trains the LLaVA projector for three epochs on the embeddings of the frozen d2g encoder.
+# Trains the LLaVA node projector for two epochs on the embeddings of the frozen d2g model.
 # Arguments after the script go on to train_projector.py:
 #
 #   sbatch runs/llava-projector.sh
@@ -28,5 +28,6 @@ cd LLaVA
 uv sync
 uv run train_projector.py \
   --embeddings ../results/runs/floorplans-d2g-walls-first-by-kind-frozen-seed0-200k/embeddings-d2g-synthetic-floorplans-s-deep-20261031_112046-200000 \
-  --epochs 3 \
+  --layer-type nodes \
+  --epochs 2 \
   "$@"

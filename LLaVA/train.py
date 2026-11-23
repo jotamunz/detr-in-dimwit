@@ -2,10 +2,10 @@
 it hands over and how to save it; the rest is the same.
 
 A run is logged to Weights & Biases, with its settings, the training loss of every update and the
-validation loss every so often, beside the loss of a blind model shown another plan's patches. It is
+validation loss every so often, beside the loss of a blind model shown elements of the wrong plans. It is
 kept beside the encoder run whose embeddings it reads, at
 ``<encoder run>/llava/<language model>/<run name>``, with a folder for what it trains named
-``<layer>-<dataset>``.
+``<layer_type>-<dataset>``.
 """
 
 import argparse
@@ -45,6 +45,10 @@ def parse(parser):
     return settings
 
 
+def latest_checkpoint(folder):
+    return max(folder.glob("*.pt"), key=lambda path: int(path.stem))
+
+
 def run_dir(settings):
     return settings.embeddings.resolve().parent / "llava" / settings.language_model.split("/")[-1] / settings.run_name
 
@@ -80,18 +84,19 @@ def train(settings, model, optimizer, collator, train_dataset, val_dataset, save
     schedule = get_cosine_schedule_with_warmup(optimizer, math.ceil(settings.warmup * total_updates), total_updates)
 
     def on_device(batch):
-        return {key: value.to(device, non_blocking=True) for key, value in batch.items()}
+        return {key: on_device(value) if isinstance(value, dict) else value.to(device, non_blocking=True) for key, value in batch.items()}
 
     @torch.no_grad()
     def validate(run, update):
-        """Logs the validation loss of the model against a blind model that sees the patches of the previous plan."""
+        """Logs the validation loss of the model against a blind model that sees the elements of its
+        micro-batch shuffled among its plans, each layer type within itself."""
         model.eval()
         val_losses, blind_losses = [], []
         for micro_batch in val_loader:
             micro_batch = on_device(micro_batch)
             val_losses.append(model(**micro_batch).loss.item())
-            previous_plan_patches = micro_batch["patches"].roll(1, dims=0)
-            blind_losses.append(model(**(micro_batch | {"patches": previous_plan_patches})).loss.item())
+            shuffled = {layer_type: rows[torch.randperm(len(rows), device=rows.device)] for layer_type, rows in micro_batch["elements"].items()}
+            blind_losses.append(model(**(micro_batch | {"elements": shuffled})).loss.item())
         val_loss, blind_loss = sum(val_losses) / len(val_losses), sum(blind_losses) / len(blind_losses)
         run.log({"val/loss": val_loss, "val/blind_loss": blind_loss}, step=update)
         print("epoch %d | update %d/%d | val loss %.4f | blind %.4f" % (math.ceil(update / updates_per_epoch), update, total_updates, val_loss, blind_loss))
