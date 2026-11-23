@@ -1,10 +1,13 @@
-"""Prints the answers a trained projector makes the language model write about the first plans of a
-split, beside the dataset's own. Every answer is written from the conversation up to it as the dataset
-has it, its earlier answers included, never from what the model wrote before.
+"""Prints the answers a trained model writes about the first plans of a split, beside the dataset's own.
+Every answer is written from the conversation up to it as the dataset has it, its earlier answers
+included, never from what the model wrote before.
 
-The projector is the last one saved in its folder: the ``<update>.pt`` of the most updates.
+The checkpoints are those of either stage, and the last one saved is read: from ``patches-<dataset>``
+the ``<update>.pt`` of the most updates, asked about the captioning set; from ``lora-<dataset>`` the
+``<update>/`` of the most updates, its adapters merged into the language model, asked about the
+questions set.
 
-    uv run caption.py --projector ../results/runs/<encoder run>/llava/<language model>/<run name>/patches-<dataset> \
+    uv run evaluate.py --checkpoints ../results/runs/<encoder run>/llava/<language model>/<run name>/lora-<dataset> \
         --embeddings ../results/runs/<encoder run>/embeddings-d2g-<corpus>-<size>-<run>-<step>
 """
 
@@ -14,11 +17,13 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
 from collator import IMAGE_PATCH, format_conversation
 from dataset import PlanConversation, PlanConversations
 from model import LLaVA
+from train_lora import DATASET_QA
 from train_projector import DATASET_CAPTIONING
 
 MAX_NEW_TOKENS = 80
@@ -40,22 +45,25 @@ class Turn:
 
 def main():
     arguments = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    arguments.add_argument("--projector", type=Path, required=True, help="the folder containing the trained projector's checkpoints")
-    #TODO: Get embeddings automatically from the projector
+    arguments.add_argument("--checkpoints", type=Path, required=True, help="the patches-<dataset> or lora-<dataset> folder of a training run")
+    #TODO: Get embeddings automatically from the checkpoints
     arguments.add_argument("--embeddings", type=Path, required=True, help="the folder containing the pregenerated embeddings")
     arguments.add_argument("--split", default="test")
-    arguments.add_argument("--plans", type=int, default=50, help="how many plans")
+    arguments.add_argument("--plans", type=int, default=10, help="how many plans")
     arguments.add_argument("--batch-size", type=int, default=32, help="answers written together")
     settings = arguments.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    checkpoint_path = max(settings.projector.glob("*.pt"), key=lambda path: int(path.stem))
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    print("reading %s, a projector for %s" % (checkpoint_path, checkpoint["language_model"]))
+    adapted = settings.checkpoints.name.startswith("lora-")
+    latest = max(settings.checkpoints.iterdir(), key=lambda path: int(path.stem))
+    checkpoint = torch.load(latest / "projector.pt" if adapted else latest, map_location="cpu")
+    print("reading %s, trained for %s" % (latest, checkpoint["language_model"]))
 
     tokenizer = AutoTokenizer.from_pretrained(checkpoint["language_model"])
     language_model = AutoModelForCausalLM.from_pretrained(checkpoint["language_model"], dtype=torch.bfloat16)
-    dataset = PlanConversations(settings.split, settings.embeddings, DATASET_CAPTIONING)
+    if adapted:
+        language_model = PeftModel.from_pretrained(language_model, latest).merge_and_unload()
+    dataset = PlanConversations(settings.split, settings.embeddings, DATASET_QA if adapted else DATASET_CAPTIONING)
     model = LLaVA(language_model, tokenizer.convert_tokens_to_ids(IMAGE_PATCH), patch_embedding=dataset[0].patches.shape[-1])
     model.projector.load_state_dict(checkpoint["projector"])
     model.to(device).eval()
