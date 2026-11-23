@@ -5,12 +5,12 @@
 #SBATCH --gres=gpu:1
 #SBATCH --exclude=irvine
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
+#SBATCH --mem=48G
 #SBATCH --time=10:00:00
 #SBATCH --output=/cluster/home/%u/.logs/slurm/%j/%x_%j.out
 #SBATCH --error=/cluster/home/%u/.logs/slurm/%j/%x_%j.err
 #
-# Trains the LoRA adapters on the language model and LLaVA projector for three epochs on the embeddings of the frozen d2g encoder.
+# Trains the LoRA adapters on the language model and LLaVA projector for two epochs on the embeddings of the frozen d2g encoder.
 # Arguments after the script go on to train_lora.py:
 #
 #   sbatch runs/llava-lora.sh
@@ -29,5 +29,5 @@ uv sync
 uv run train_lora.py \
   --embeddings ../results/runs/floorplans-d2g-walls-first-by-kind-frozen-seed0-200k/embeddings-d2g-synthetic-floorplans-s-deep-20261031_112046-200000 \
   --projector ../results/runs/floorplans-d2g-walls-first-by-kind-frozen-seed0-200k/llava/Qwen2.5-0.5B-Instruct/20261118_171735/patches-synthetic-floorplans-captioning \
-  --epochs 3 \
+  --epochs 2 \
   "$@"
